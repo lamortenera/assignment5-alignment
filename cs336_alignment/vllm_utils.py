@@ -149,6 +149,7 @@ def start_server(
         "--load-format",
         load_format,
     ]
+
     logger.info("Starting vLLM server: %s", " ".join(command))
     return subprocess.Popen(command, env=env, start_new_session=True)
 

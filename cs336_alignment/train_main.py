@@ -10,6 +10,7 @@ import json
 import torch
 import time
 from datetime import datetime
+import gc
 
 import checkpoint
 import assignment_lib
@@ -21,9 +22,9 @@ parser.add_argument("--num_steps", type=int, default=100, help="The number of tr
 parser.add_argument("--batch_size", type=int, default=128, help="Number of examples in the train/eval batch")
 parser.add_argument("--eval_every_n", type=int, default=10, help="The number of training steps.")
 parser.add_argument("--checkpoint_every_n", type=int, default=10, help="After how many steps should we save a new checkpoint.")
-parser.add_argument("--group_size", type=int, default=8, help="How many rollouts per prompt to make.")
+parser.add_argument("--group_size", type=int, default=2, help="How many rollouts per prompt to make.")
 parser.add_argument("--learning_rate", type=float, default=1e-5, help="Learning rate for AdamW optimizer")
-parser.add_argument("--gradient_accumulation_steps", type=int, default=16, help="Number of microbatches per batch")
+parser.add_argument("--gradient_accumulation_steps", type=int, default=64, help="Number of microbatches per batch")
 parser.add_argument("--max_grad_norm", type=float, default=1.0, help="The maximum gradient norm")
 
 _MODEL_ID = "allenai/OLMo-2-0425-1B"
@@ -134,7 +135,7 @@ def run_eval(num_steps, test_path, batch_size, prompt_name, vllm):
     for step, (questions, ground_truths) in enumerate(test_batch_gen):
         if step >= num_steps:
             break
-        prompts = [prompt_template.format(q) for q in questions]
+        prompts = [prompt_template.format(question=q) for q in questions]
         completions = vllm.generate_completions(prompts, sampling_params)
         for c, gt in zip(completions, ground_truths):
             grading = grade_response(c.text, prompt_name, gt)
@@ -150,6 +151,21 @@ def run_eval(num_steps, test_path, batch_size, prompt_name, vllm):
     
     return eval_metrics
 
+def flush_trainer_memory(model):
+    # 1. Clear out internal python reference tracking cycles
+    gc.collect()
+
+    # 2. Tell PyTorch to explicitly drop remaining computational activation artifacts
+    # (Note: If using DeepSpeed, the optimizer zeros gradients during the step,
+    # but manually forcing it drops any missed tracking states)
+    model.zero_grad(set_to_none=True)
+
+    # 3. Force the underlying CUDA caching allocator to release empty memory back to the GPU OS
+    torch.cuda.empty_cache()
+
+    # 4. Optional: Reset peak tracking markers so you can monitor real transfer usage
+    torch.cuda.reset_peak_memory_stats()
+
 if __name__ == "__main__":
     args = parser.parse_args()
     assert args.checkpoint_every_n % args.eval_every_n == 0, "You should save only evaluated checkpoints"
@@ -157,12 +173,14 @@ if __name__ == "__main__":
     microbatch_size = args.batch_size // args.gradient_accumulation_steps
     assert microbatch_size % args.group_size == 0, "The group size should divide the microbatch size without remainder"
 
+    promtp_batch_size = args.batch_size // args.group_size
     train_batch_gen = batch_generator(
         example_generator(_TRAIN_PATH, infinite_loop=True), 
-        args.batch_size)
+        promtp_batch_size)
+    
 
     # Spin up VLLM
-    vllm = vllm_utils.VLLMServer(model_id=_MODEL_ID, gpu=0)
+    vllm = vllm_utils.VLLMServer(model_id=_MODEL_ID, gpu=1)
     vllm.start()
     sampling_params = get_sampling_params(
         args.prompt, args.group_size)
@@ -184,19 +202,21 @@ if __name__ == "__main__":
     prompt_template = get_prompt(args.prompt)
 
     print(f"Run id: {run_id}, outputs will be written to: {output_dir}")
-    
+    vllm.init_weight_sync(model.device)
+                
     start_time = time.time()
     for iter in range(args.num_steps):
         print(f"Iter {iter}")
         with Timer() as step_timer:
             questions, ground_truths = next(train_batch_gen)
-            prompts = [prompt_template.format(q) for q in questions]
+            prompts = [prompt_template.format(question=q) for q in questions]
 
             with Timer() as inference_timer:
                 completions = vllm.generate_completions(
                     prompts, sampling_params)
 
             responses = [c.text for c in completions]
+            print(f"Got {len(responses)} responses for {len(prompts)} prompts, group size is {args.group_size}")
             assert len(responses) == args.group_size * len(prompts)
             repeated_prompts = repeat_values(prompts, args.group_size)
             repeated_ground_truths = repeat_values(ground_truths, args.group_size)
@@ -211,6 +231,7 @@ if __name__ == "__main__":
                     args.group_size)
             
             with Timer() as sync_timer:
+                flush_trainer_memory(model)
                 vllm.sync_policy_weights(model)
 
 

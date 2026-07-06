@@ -158,17 +158,19 @@ def grpo_train_step(
 
     def microbatch_loss(mb_repeated_prompts, mb_rollout_responses, mb_repeated_ground_truths):
         tokenization_output = tokenize_prompt_and_output2(mb_repeated_prompts, mb_rollout_responses, tokenizer)
-        logprobs_output = get_response_log_probs(
-            model, tokenization_output["input_ids"], tokenization_output["labels"])
+        input_ids = tokenization_output["input_ids"].to(model.device)
+        labels = tokenization_output["labels"].to(model.device)
+        response_mask = tokenization_output["response_mask"].to(model.device)
+        print(f"Input ids shape: {input_ids.shape}, labels shape: {labels.shape}")
+        logprobs_output = get_response_log_probs(model, input_ids, labels)
         rewards_output = compute_rollout_rewards(reward_fn, mb_rollout_responses, mb_repeated_ground_truths)
         gn_rewards_output = compute_group_normalized_rewards(
-            rewards_output[0], group_size, baseline, advantage_eps, advantage_normalizer)
+            rewards_output[0].to(model.device), group_size, baseline, advantage_eps, advantage_normalizer)
         token_loss = compute_policy_gradient_loss(
             gn_rewards_output[0], logprobs_output["log_probs"], 
-            importance_reweighting_method, old_log_probs, cliprange,
-            tokenization_output["response_mask"])
+            importance_reweighting_method, old_log_probs, cliprange, response_mask)
         sequence_loss = aggregate_loss_across_microbatch(token_loss[0], 
-            tokenization_output["response_mask"], loss_normalization, normalization_constant)
+            response_mask, loss_normalization, normalization_constant)
         
         stats = rewards_output[1]
         stats["reward"] = rewards_output[0].sum()
@@ -180,7 +182,7 @@ def grpo_train_step(
 
     batch_size = len(repeated_prompts)
     microbatch_size = int(math.ceil(batch_size / gradient_accumulation_steps))
-
+    print(f"Batch size: {batch_size}, grad accum steps: {gradient_accumulation_steps}, Microbatch size: {microbatch_size}")
     
     batch_loss = 0
     batch_stats = {}
