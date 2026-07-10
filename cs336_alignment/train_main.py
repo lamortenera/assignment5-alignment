@@ -166,6 +166,18 @@ def flush_trainer_memory(model):
     # 4. Optional: Reset peak tracking markers so you can monitor real transfer usage
     torch.cuda.reset_peak_memory_stats()
 
+
+def estimate_static_memory(model):
+    param_bytes = 0
+    
+    for p in model.parameters():
+        # Size of elements * element count
+        p_mem = p.element_size() * p.nelement()
+        param_bytes += p_mem
+
+    print(f"Calculated Parameters: {param_bytes / (1024**2):.2f} MB")
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
     assert args.checkpoint_every_n % args.eval_every_n == 0, "You should save only evaluated checkpoints"
@@ -191,6 +203,8 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.learning_rate, 
         betas=(0.9, 0.95), weight_decay=0.0)
+    
+    estimate_static_memory(model)
     
     reward_fn = drgrpo_grader.question_only_reward_fn
     if args.prompt.startswith("r1_zero"):
