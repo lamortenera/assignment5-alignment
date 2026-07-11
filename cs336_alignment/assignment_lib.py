@@ -207,6 +207,9 @@ def grpo_train_step(
     optimizer.step()
     optimizer.zero_grad()
 
+    allocated_mb = torch.cuda.memory_allocated() / (1024 ** 2)
+    print(f"Allocated memory (pytorch) at the end of the end of the batch: {allocated_mb:.2f} MB")
+
     return batch_loss, {"grad_norm": total_norm, 
                         "avg_reward": batch_stats["reward"]/batch_size,
                         "avg_format_reward": batch_stats["format_reward"]/batch_size,
