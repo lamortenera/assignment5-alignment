@@ -244,8 +244,13 @@ if __name__ == "__main__":
                     repeated_prompts, responses, repeated_ground_truths,
                     args.group_size)
             
+            flush_trainer_memory(model)
+            print("Memory usage at the end of the batch: ")
+            print(torch.cuda.memory_summary(device=0, abbreviated=False))
+            allocated_mb = torch.cuda.memory_allocated(device=0) / (1024 ** 2)
+            print(f"Allocated memory (pytorch) at the end of the {iter+1}-th batch: {allocated_mb:.2f} MB")
+            
             with Timer() as sync_timer:
-                flush_trainer_memory(model)
                 vllm.sync_policy_weights(model)
 
 
