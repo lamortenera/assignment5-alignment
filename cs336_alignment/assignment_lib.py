@@ -42,7 +42,7 @@ def tokenize_prompt_and_output2(
     assert len(prompt_strs) == len(output_strs)
     output = tokenizer(
         text=prompt_strs, text_pair=output_strs, padding="max_length",
-        max_length=1024, truncation=True,
+        max_length=512, truncation=True,
         return_tensors='pt', return_token_type_ids=True)
     all_input_ids = output['input_ids']
     all_response_masks = output['token_type_ids']
@@ -162,7 +162,7 @@ def grpo_train_step(
         input_ids = tokenization_output["input_ids"].to(model.device)
         labels = tokenization_output["labels"].to(model.device)
         response_mask = tokenization_output["response_mask"].to(model.device)
-        # print(f"Input ids shape: {input_ids.shape}, labels shape: {labels.shape}")
+        print(f"Input ids shape: {input_ids.shape}, labels shape: {labels.shape}")
         logprobs_output = get_response_log_probs(model, input_ids, labels)
         rewards_output = compute_rollout_rewards(reward_fn, mb_rollout_responses, mb_repeated_ground_truths)
         gn_rewards_output = compute_group_normalized_rewards(
