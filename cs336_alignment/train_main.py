@@ -195,7 +195,7 @@ def debug_oom(output_dir):
     max_entries=100000)
 
     snapshot_path = str(output_dir / "memory_snapshot.pickle")
-
+    
     def save_oom_snapshot(device, alloc, device_alloc, device_free):
         print("🚨 CUDA Out of Memory detected! Dumping snapshot...")
         print_allocated_memory("right before OOM")
@@ -221,6 +221,7 @@ if __name__ == "__main__":
 
     run_id = datetime.now().strftime("%Y%m%d%H%M%S")
     output_dir = _DATA_PATH / run_id
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
     print(f"Run id: {run_id}, outputs will be written to: {output_dir}")
     
     if args.debug_oom:
