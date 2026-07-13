@@ -41,7 +41,8 @@ def tokenize_prompt_and_output2(
     ) -> dict[str, torch.Tensor]:
     assert len(prompt_strs) == len(output_strs)
     output = tokenizer(
-        text=prompt_strs, text_pair=output_strs, padding=True,
+        text=prompt_strs, text_pair=output_strs, padding="max_length",
+        max_length=1024, truncation=True,
         return_tensors='pt', return_token_type_ids=True)
     all_input_ids = output['input_ids']
     all_response_masks = output['token_type_ids']
