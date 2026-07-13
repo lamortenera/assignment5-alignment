@@ -201,7 +201,7 @@ def grpo_train_step(
         allocated_mb = torch.cuda.memory_allocated() / (1024 ** 2)
         print(f"Allocated memory (pytorch) at the end of the {i+1}-th microbatch: {allocated_mb:.2f} MB")
     
-    total_norm = torch.nn.utils.get_total_norm(model.parameters())
+    total_norm = torch.nn.utils.get_total_norm(model.parameters()).item()
     if max_grad_norm:
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
     
