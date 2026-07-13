@@ -180,6 +180,10 @@ def estimate_static_memory(model):
 
     print(f"Calculated Parameters: {param_bytes / (1024**2):.2f} MB")
 
+def print_allocated_memory(label):
+    allocated_mb = torch.cuda.memory_allocated(device=0) / (1024 ** 2)
+    print(f"Allocated memory (pytorch) {label}: {allocated_mb:.2f} MB")
+
 
 def debug_oom(output_dir):
     assert torch.cuda.is_available()
@@ -194,6 +198,7 @@ def debug_oom(output_dir):
 
     def save_oom_snapshot(device, alloc, device_alloc, device_free):
         print("🚨 CUDA Out of Memory detected! Dumping snapshot...")
+        print_allocated_memory("right before OOM")
         try:
             # Capture the memory state at the exact moment of OOM
             snapshot = torch.cuda.memory._snapshot()
@@ -206,7 +211,6 @@ def debug_oom(output_dir):
             print(f"Failed to save snapshot: {e}")
 
     torch._C._cuda_attach_out_of_memory_observer(save_oom_snapshot)
-
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -281,8 +285,7 @@ if __name__ == "__main__":
             flush_trainer_memory(model)
             print("Memory usage at the end of the batch: ")
             print(torch.cuda.memory_summary(device=0, abbreviated=False))
-            allocated_mb = torch.cuda.memory_allocated(device=0) / (1024 ** 2)
-            print(f"Allocated memory (pytorch) at the end of the {iter+1}-th batch: {allocated_mb:.2f} MB")
+            print_allocated_memory("end of batch")
             
             with Timer() as sync_timer:
                 vllm.sync_policy_weights(model)
