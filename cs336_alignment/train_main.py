@@ -11,6 +11,7 @@ import torch
 import time
 from datetime import datetime
 import gc
+import pickle
 
 import checkpoint
 import assignment_lib
@@ -26,6 +27,8 @@ parser.add_argument("--group_size", type=int, default=2, help="How many rollouts
 parser.add_argument("--learning_rate", type=float, default=1e-5, help="Learning rate for AdamW optimizer")
 parser.add_argument("--gradient_accumulation_steps", type=int, default=64, help="Number of microbatches per batch")
 parser.add_argument("--max_grad_norm", type=float, default=1.0, help="The maximum gradient norm")
+parser.add_argument("--debug_oom", type=bool, default=False, help="Whether to debug OOM")
+
 
 _MODEL_ID = "allenai/OLMo-2-0425-1B"
 _DATA_PATH = (pathlib.Path(__file__).resolve().parent.parent) / "data"
@@ -178,12 +181,46 @@ def estimate_static_memory(model):
     print(f"Calculated Parameters: {param_bytes / (1024**2):.2f} MB")
 
 
+def debug_oom(output_dir):
+    assert torch.cuda.is_available()
+
+    torch.cuda.memory._record_memory_history(
+    enabled="all", 
+    context="alloc", 
+    stacks="python", 
+    max_entries=100000)
+
+    snapshot_path = str(output_dir / "memory_snapshot.pickle")
+
+    def save_oom_snapshot(device, alloc, device_alloc, device_free):
+        print("🚨 CUDA Out of Memory detected! Dumping snapshot...")
+        try:
+            # Capture the memory state at the exact moment of OOM
+            snapshot = torch.cuda.memory._snapshot()
+            
+            with open(snapshot_path, "wb") as f:
+                pickle.dump(snapshot, f)
+                
+            print(f"✅ Snapshot saved successfully to {snapshot_path}!")
+        except Exception as e:
+            print(f"Failed to save snapshot: {e}")
+
+    torch._C._cuda_attach_out_of_memory_observer(save_oom_snapshot)
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
     assert args.checkpoint_every_n % args.eval_every_n == 0, "You should save only evaluated checkpoints"
     assert args.batch_size % args.gradient_accumulation_steps == 0, "Num microbatches should divide batch size without remainder"
     microbatch_size = args.batch_size // args.gradient_accumulation_steps
     assert microbatch_size % args.group_size == 0, "The group size should divide the microbatch size without remainder"
+
+    run_id = datetime.now().strftime("%Y%m%d%H%M%S")
+    output_dir = _DATA_PATH / run_id
+    print(f"Run id: {run_id}, outputs will be written to: {output_dir}")
+    
+    if args.debug_oom:
+        debug_oom(output_dir)
 
     promtp_batch_size = args.batch_size // args.group_size
     train_batch_gen = batch_generator(
@@ -210,12 +247,9 @@ if __name__ == "__main__":
     if args.prompt.startswith("r1_zero"):
         reward_fn = drgrpo_grader.r1_zero_reward_fn
     
-    run_id = datetime.now().strftime("%Y%m%d%H%M%S")
-    output_dir = _DATA_PATH / run_id
-
+    
     prompt_template = get_prompt(args.prompt)
 
-    print(f"Run id: {run_id}, outputs will be written to: {output_dir}")
     vllm.init_weight_sync(model.device)
                 
     start_time = time.time()

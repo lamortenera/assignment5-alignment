@@ -194,7 +194,7 @@ def grpo_train_step(
         if loss_normalization == "sequence":
             loss *= len(mb_repeated_prompts)/batch_size
         loss.backward()
-        batch_loss += loss
+        batch_loss += loss.item()
         for k, v in stats.items():
             batch_stats[k] = batch_stats.get(k, 0) + v
         allocated_mb = torch.cuda.memory_allocated() / (1024 ** 2)
