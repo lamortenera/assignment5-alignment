@@ -234,7 +234,7 @@ if __name__ == "__main__":
     
 
     # Spin up VLLM
-    vllm = vllm_utils.VLLMServer(model_id=_MODEL_ID, gpu=1)
+    vllm = vllm_utils.VLLMServer(model_id=_MODEL_ID, gpu=1, gpu_memory_utilization=0.6)
     vllm.start()
     sampling_params = get_sampling_params(
         args.prompt, args.group_size)
