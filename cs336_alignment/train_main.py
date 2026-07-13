@@ -23,9 +23,9 @@ parser.add_argument("--num_steps", type=int, default=100, help="The number of tr
 parser.add_argument("--batch_size", type=int, default=128, help="Number of examples in the train/eval batch")
 parser.add_argument("--eval_every_n", type=int, default=10, help="The number of training steps.")
 parser.add_argument("--checkpoint_every_n", type=int, default=10, help="After how many steps should we save a new checkpoint.")
-parser.add_argument("--group_size", type=int, default=2, help="How many rollouts per prompt to make.")
+parser.add_argument("--group_size", type=int, default=8, help="How many rollouts per prompt to make.")
 parser.add_argument("--learning_rate", type=float, default=1e-5, help="Learning rate for AdamW optimizer")
-parser.add_argument("--gradient_accumulation_steps", type=int, default=64, help="Number of microbatches per batch")
+parser.add_argument("--gradient_accumulation_steps", type=int, default=16, help="Number of microbatches per batch")
 parser.add_argument("--max_grad_norm", type=float, default=1.0, help="The maximum gradient norm")
 parser.add_argument("--debug_oom", type=bool, default=False, help="Whether to debug OOM")
 
@@ -125,7 +125,7 @@ def run_eval(num_steps, test_path, batch_size, prompt_name, vllm):
     test_batch_gen = batch_generator(
         example_generator(test_path), batch_size)
     prompt_template = get_prompt(prompt_name)
-    sampling_params = get_sampling_params(prompt, group_size=1)
+    sampling_params = get_sampling_params(prompt_name, group_size=1)
 
 
     eval_metrics = {
@@ -284,8 +284,8 @@ if __name__ == "__main__":
                     args.group_size)
             
             flush_trainer_memory(model)
-            print("Memory usage at the end of the batch: ")
-            print(torch.cuda.memory_summary(device=0, abbreviated=False))
+            #print("Memory usage at the end of the batch: ")
+            #print(torch.cuda.memory_summary(device=0, abbreviated=False))
             print_allocated_memory("end of batch")
             
             with Timer() as sync_timer:

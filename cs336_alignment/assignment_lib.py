@@ -161,7 +161,7 @@ def grpo_train_step(
         input_ids = tokenization_output["input_ids"].to(model.device)
         labels = tokenization_output["labels"].to(model.device)
         response_mask = tokenization_output["response_mask"].to(model.device)
-        print(f"Input ids shape: {input_ids.shape}, labels shape: {labels.shape}")
+        # print(f"Input ids shape: {input_ids.shape}, labels shape: {labels.shape}")
         logprobs_output = get_response_log_probs(model, input_ids, labels)
         rewards_output = compute_rollout_rewards(reward_fn, mb_rollout_responses, mb_repeated_ground_truths)
         gn_rewards_output = compute_group_normalized_rewards(
@@ -198,7 +198,7 @@ def grpo_train_step(
         for k, v in stats.items():
             batch_stats[k] = batch_stats.get(k, 0) + v
         allocated_mb = torch.cuda.memory_allocated() / (1024 ** 2)
-        print(f"Allocated memory (pytorch) at the end of the {i+1}-th microbatch: {allocated_mb:.2f} MB")
+        #print(f"Allocated memory (pytorch) at the end of the {i+1}-th microbatch: {allocated_mb:.2f} MB")
     
     total_norm = torch.nn.utils.get_total_norm(model.parameters())
     if max_grad_norm:
