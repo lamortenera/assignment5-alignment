@@ -224,6 +224,7 @@ if __name__ == "__main__":
     print(f"Run id: {run_id}, outputs will be written to: {output_dir}")
     
     if args.debug_oom:
+        print("Adding debug for OOM")
         debug_oom(output_dir)
 
     promtp_batch_size = args.batch_size // args.group_size
